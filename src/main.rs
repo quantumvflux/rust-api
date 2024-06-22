@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{App, web, get, post, HttpServer, HttpResponse, Responder};
+use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer, Responder};
 use serde::{Serialize, Deserialize};
 use rusqlite::{params, Connection};
 use std::sync::Mutex;
@@ -54,6 +54,26 @@ async fn add_post(db: web::Data<Mutex<Connection>>, new_post: web::Json<NewPost>
     HttpResponse::Created().finish()
 }
 
+#[delete("/posts/{id}")]
+async fn delete_post(db: web::Data<Mutex<Connection>>, post_id: web::Path<i32>) -> impl Responder {
+    let conn = db.lock().unwrap();
+    let result = conn.execute(
+        "DELETE FROM posts WHERE id = ?1", 
+        params![*post_id],
+    );
+
+    match result {
+        Ok(affected_rows) => {
+            if affected_rows > 0 {
+                HttpResponse::Ok().finish()
+            } else {
+                HttpResponse::NotFound().body("Post not found")
+            }
+        },
+        Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let conn = Connection::open("database.db").expect("Failed to open database");
@@ -77,6 +97,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(get_posts)
             .service(add_post)
+            .service(delete_post)
     })
     .bind(("localhost", 8000))?
     .run()
